@@ -1,0 +1,2 @@
+compile with tcc: tcc main.c -L . -llibmpsse
+requires: msvcr120.dll (found in Microsoft Visual C++ 2013 Redistributable ), ftdi drivers (windows 10 automatically installs on device detection) 
