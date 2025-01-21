@@ -1,8 +1,12 @@
 package main
 
 import (
+	"go_ft232h_interaction/src/error"
 	"log"
+
 	"unsafe"
+
+	"github.com/nipuntalukdar/bitset"
 )
 
 /*
@@ -20,6 +24,7 @@ var spi_channel_handle C.FT_HANDLE
 
 func main() {
 	log.Println("*")
+
 	initialize()
 
 	var num_of_spi_channels C.DWORD
@@ -43,8 +48,46 @@ func main() {
 	spi_channel_config_casted.ClockRate = 2000000
 	spi_channel_config_casted.LatencyTimer = 1
 	spi_channel_config_casted.configOptions = C.SPI_CONFIG_OPTION_MODE0 | C.SPI_CONFIG_OPTION_CS_DBUS3 | C.SPI_CONFIG_OPTION_CS_ACTIVELOW
-	spi_channel_config_casted.Pin = 0b00000000000010110000000000001011
-	spi_channel_config_casted.currentPinState = 0b0000000000001011
+
+	bit_set := bitset.NewBitset(32)
+	//initial direction 0-7
+	error.Fatal(bit_set.Flip(31 - 0)) //clk
+	error.Fatal(bit_set.Flip(31 - 1)) //out
+	error.Fatal(bit_set.Flip(31 - 3)) //cs
+
+	//initial values 8-15
+	error.Fatal(bit_set.Flip(31 - 10)) //cs
+
+	//final direction 16-23
+	error.Fatal(bit_set.Flip(31 - 16)) //clk
+	error.Fatal(bit_set.Flip(31 - 17)) //out
+	error.Fatal(bit_set.Flip(31 - 18)) //cs
+
+	//final values 24-31
+	error.Fatal(bit_set.Flip(31 - 26)) //cs
+
+	spi_channel_config_casted_pin, err := bit_set.GetVal(0, 31)
+	log.Println(spi_channel_config_casted_pin)
+	error.Fatal(err)
+	var spi_channel_config_casted_pin_dword C.DWORD = (C.DWORD)(spi_channel_config_casted_pin)
+	spi_channel_config_casted.Pin = spi_channel_config_casted_pin_dword
+
+	bit_set = bitset.NewBitset(16)
+
+	//curent direction 0-7
+	error.Fatal(bit_set.Flip(15 - 0)) //clk
+	error.Fatal(bit_set.Flip(15 - 1)) //out
+	error.Fatal(bit_set.Flip(15 - 3)) //cs
+
+	//current values 8-15
+	error.Fatal(bit_set.Flip(15 - 10)) //cs
+
+	spi_channel_config_casted_current_pin_state, err := bit_set.GetVal(0, 15)
+	log.Println(spi_channel_config_casted_current_pin_state)
+	error.Fatal(err)
+	var spi_channel_config_casted_current_pin_state_u_short = (C.ushort)(spi_channel_config_casted_current_pin_state)
+	spi_channel_config_casted.currentPinState = spi_channel_config_casted_current_pin_state_u_short
+
 	ft_status = C.SPI_InitChannel(spi_channel_handle, spi_channel_config_casted)
 	if ft_status != C.FT_OK {
 		log.Println("Unable to initialize device spi channel:", ft_status)
@@ -66,8 +109,8 @@ func main() {
 		return
 	}
 
-	var gpio_line_direction C.UCHAR = 0b00001011
-	var gpio_line_value C.UCHAR = 0b00000000
+	var gpio_line_direction C.UCHAR = 0
+	var gpio_line_value C.UCHAR = 0
 	ft_status = C.FT_WriteGPIO(spi_channel_handle, gpio_line_direction, gpio_line_value)
 	if ft_status != C.FT_OK {
 		log.Println("Unable write gpio:", ft_status)
@@ -76,7 +119,8 @@ func main() {
 	}
 	log.Println("Wrote GPIO")
 
-	data := "Hola Mundo!"
+	// data := "Hola Mundo!"
+	data := "="
 	data_size := len(data)
 	buffer := (*C.UCHAR)(C.malloc(C.size_t(data_size)))
 	defer C.free(unsafe.Pointer(buffer)) // Free the buffer when done
@@ -95,6 +139,7 @@ func main() {
 		deinitialize()
 		return
 	}
+
 	log.Println("Bytes written to device spi:", bytes_transferred)
 
 	deinitialize()
