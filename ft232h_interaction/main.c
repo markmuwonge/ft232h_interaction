@@ -6,75 +6,96 @@
 
 #include <stdlib.h>
 
-#include "libmpsse_spi.h"
+#include "libmpsse_i2c.h"
+
+#include <windows.h>
+
+// #define SLAVE_ADDRESS 0x50
+#define SLAVE_ADDRESS 0x7f
 
 void init();
 void deinit();
 
 static FT_STATUS ft_status = 0;
-static FT_HANDLE spi_channel_handle = NULL;
-static ChannelConfig* spi_channel_config;
+static FT_HANDLE i2c_channel_handle = NULL;
+static ChannelConfig* i2c_channel_config;
+
+
 int main() {
     init();
 
-    DWORD num_of_spi_channels;
-    ft_status = SPI_GetNumChannels(&num_of_spi_channels);
+    DWORD num_of_i2c_channels;
+    ft_status = I2C_GetNumChannels(&num_of_i2c_channels);
     if (ft_status != FT_OK){
-        printf("Unable to get number of spi channels for device: %d\n", ft_status);
+        printf("Unable to get number of i2c channels for device: %d\n", ft_status);
         deinit();
         return;
     }
-    printf("Number of spi channels for device: %d\n", num_of_spi_channels);
-    if (num_of_spi_channels <=0){
-        printf("Unable to get spi channels for device: %d\n", ft_status);
+    printf("Number of i2c channels for device: %d\n", num_of_i2c_channels);
+    if (num_of_i2c_channels <=0){
+        printf("Unable to get i2c channels for device: %d\n", ft_status);
         deinit();
         return;
     }
     
-    ft_status = SPI_OpenChannel(0, &spi_channel_handle);
+    ft_status = I2C_OpenChannel(0, &i2c_channel_handle);
     if (ft_status != FT_OK){
-        printf("Unable to open device spi channel: %d\n", ft_status);
+        printf("Unable to open device i2c channel: %d\n", ft_status);
         deinit();
         return;
     }
-    printf("Device spi channel opened\n");
+    printf("Device i2c channel opened\n");
 
-    spi_channel_config->ClockRate = 2000000;
-    spi_channel_config->LatencyTimer = 1;
-    spi_channel_config->configOptions = SPI_CONFIG_OPTION_MODE0 | SPI_CONFIG_OPTION_CS_DBUS3 | SPI_CONFIG_OPTION_CS_ACTIVELOW;
-    spi_channel_config->Pin = 0b00000000000010110000000000001011;
-    spi_channel_config->currentPinState = 0b0000000000001011;
+    i2c_channel_config->ClockRate = I2C_CLOCK_STANDARD_MODE;
+    i2c_channel_config->LatencyTimer = 50;
+    i2c_channel_config->Options = I2C_TRANSFER_OPTIONS_NO_ADDRESS;  
+    i2c_channel_config->Pin = 0b00000000000000110000000000000011; //D0 SCL, D1, SDA
+    i2c_channel_config->currentPinState = 0b0000000000000011;
 
-    ft_status = SPI_InitChannel(spi_channel_handle, spi_channel_config);
+    ft_status = I2C_InitChannel(i2c_channel_handle, i2c_channel_config);
     if (ft_status != FT_OK){
-        printf("Unable to initialize device spi channel: %d\n", ft_status);
+        printf("Unable to initialize device i2c channel: %d\n", ft_status);
         deinit();
         return;
     }
-    printf("Device spi channel initialized\n");
-
-    BOOL device_busy;
-    ft_status = SPI_IsBusy(spi_channel_handle, &device_busy);
-    if (ft_status != FT_OK){
-        printf("Unable to determine if device spi is busy: %d\n", ft_status);
-        deinit();
-        return;
-    }
-    printf("Device SPI busy: %d\n", device_busy);
-    if (device_busy){
-        deinit();
-        return;
-    }
+    printf("Device i2c channel initialized\n");
 
     UCHAR buffer[] = "Hello World!";
     DWORD bytes_transferred = 0;
-    ft_status = SPI_Write(spi_channel_handle, buffer, sizeof(buffer)/sizeof(buffer[0]) , &bytes_transferred, SPI_TRANSFER_OPTIONS_SIZE_IN_BYTES | SPI_TRANSFER_OPTIONS_CHIPSELECT_ENABLE | SPI_TRANSFER_OPTIONS_CHIPSELECT_DISABLE);
-    if (ft_status != FT_OK){
-        printf("Unable write to device spi: %d\n", ft_status);
-        deinit();
-        return;
+    UCHAR recv_buffer[255];
+    DWORD bytes_received = 0;
+
+    while(1){
+        ft_status = I2C_DeviceWrite(
+            i2c_channel_handle,
+            SLAVE_ADDRESS,
+            sizeof(buffer)/sizeof(buffer[0]),
+            buffer,
+            &bytes_transferred,
+            I2C_TRANSFER_OPTIONS_START_BIT | I2C_TRANSFER_OPTIONS_STOP_BIT
+        );
+        if (ft_status != FT_OK){
+            // printf("Unable write to device i2c: %d\n", ft_status);
+            // deinit();
+            // return;
+        }
+        printf("Bytes written to device i2c: %d\n", bytes_transferred);
+
+
+        // I2C_DeviceRead(
+        //     i2c_channel_handle,
+        //     0x7F,
+        //     255,
+        //     recv_buffer,
+        //     &bytes_received,
+        //     I2C_TRANSFER_OPTIONS_NO_ADDRESS
+        // )
+
+
+        Sleep(1000);
     }
-    printf("Bytes written to device spi: %d\n", bytes_transferred);
+
+
 
   deinit();
   return 0;
@@ -83,14 +104,14 @@ int main() {
 void init(){
     Init_libMPSSE();
     printf("Init\n");
-    spi_channel_config = malloc(sizeof(ChannelConfig));
+    i2c_channel_config = malloc(sizeof(ChannelConfig));
 }
 
 void deinit(){
     Cleanup_libMPSSE();
-    if (spi_channel_handle != NULL){
-        SPI_CloseChannel(spi_channel_handle);
+    if (i2c_channel_handle != NULL){
+        I2C_CloseChannel(i2c_channel_handle);
     }
-    free(spi_channel_config);
+    free(i2c_channel_config);
     printf("Deinit\n");
 }
